@@ -2,11 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.optimize as opt
 import networkx as nx
-import sklearn
+from sklearn.manifold import SpectralEmbedding
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 # quite important - scipy version at least 1.8 is required
+
 
 class Graph:
     def __init__(self):
@@ -88,14 +89,15 @@ class Graph:
         self.G = nx.barbell_graph(m, n)
 
     # functions to show results
-    def visualize(self):
+    def visualize(self, title="graph visualisation"):
         """ function plots graph G using matplotlib and networkx"""
+        plt.title(title)
         nx.draw_networkx(self.G)
         plt.show()
 
-    def visualize_matrix(self, Y, title):
+    def visualize_matrix(self, Y, title="graph projected to 2-dim space"):
         """ function simply draws a plot with matplotlib """
-        Y = np.reshape(Y, shape=(2, -1))
+        Y = np.reshape(Y, (2, -1))
         plt.title(title)
         plt.scatter(Y[0], Y[1])
         plt.show()
@@ -120,7 +122,7 @@ class Graph:
         self.n = self.G.number_of_nodes()
 
     # functions to solve problems
-    def map_to_matrix(self, d):
+    def find_opt_y_eig(self, d):
         """
         function finds matrices Y, such that Y^T @ D @ Y = I and tr(Y^T @ L @ Y) is the smallest
 
@@ -152,10 +154,10 @@ class Graph:
 
         return res.reshape(d, -1)
 
-
-    def find_opt_y(self, d):
+    def find_opt_y(self, d, ftol=1e-6):
         """
         function find_optimal_y has two parameters
+        :param ftol: optional parameter - provides precision
         :param d - a non zero number that determines on how many dimensional space we will project the graph
         another parameter is the graph G
 
@@ -194,34 +196,36 @@ class Graph:
             the smallest (where L is the laplacian of graph G
             :return trace of Y^T @ L @ Y
             """
-            Y = np.reshape(Y, (n, d))  # thanks to this reshaping, Y can be one dimentional as opt.minimmize wishes
+            Y = np.reshape(Y, (self.n, d))  # thanks to this reshaping, Y can be one dimentional as opt.minimmize wishes
             return np.trace(np.matmul(np.matmul(np.transpose(Y), self.L), Y))
 
-        Y = np.random.rand(self.n * self.d)
+        Y = np.random.rand(self.n * d)
         # print(self.cond(Y))
         # print(self.y_trace(Y))
         cons = [{'type': 'eq', 'fun': cond}]
 
-        res = opt.minimize(y_trace, Y, method="SLSQP", constraints=cons, options={"maxiter": 5000})
+        res = opt.minimize(y_trace, Y, method="SLSQP", constraints=cons, options={"ftol": ftol, "maxiter": 5000})
 
         print(res)
 
-        Y = np.reshape(res.x, (self.d, -1))
+        Y = np.reshape(res.x, (d, -1))
 
-        print(self.y_trace(Y))
-        print(self.cond(Y))  # checking the conditions - for tests only
+        print(y_trace(Y))
+        print(cond(Y))  # checking the conditions - for tests only
 
         return Y
 
-    def sklearn_embeding(self):
+    def sklearn_embeding(self, d):
         """
         sklearn package that does what we do (almost)
+        not sure if it works
         :return
         """
-        return sklearn.manifold.spectral_embedding(self.A, n_components=2)
+        embedding = SpectralEmbedding(n_components=2)
+        return embedding.fit_transform(self.A).reshape(d, -1)
 
     @staticmethod
-    def project_to_2_dimentions_with_pca(Y):
+    def project_to_2_dimensions_with_pca(Y):
         x = StandardScaler().fit_transform(Y)
         print(np.mean(x), np.std(x))
 
@@ -230,62 +234,74 @@ class Graph:
         reduced_x = reduced_x.transpose()
         return reduced_x
 
+    def show_results(self, graph_name, d=2):
+        """
+        function simply runs some tests
+        """
+        self.update()
+        # visualisation of a graph
+        self.visualize(f"{graph_name} of size {self.n}")
 
+        scipy_res = self.find_opt_y(d)
+        if d > 2:
+            self.visualize_matrix(self.project_to_2_dimensions_with_pca(scipy_res),
+                               f"scipy optimalization, {graph_name} of size {self.n}, projected to {d} dimensions")
+        else:
+            self.visualize_matrix(scipy_res, f"scipy optimalization, {graph_name} of size {self.n}")
+
+        eig_res = self.find_opt_y_eig(d)
+        if d > 2:
+            self.visualize_matrix(self.project_to_2_dimensions_with_pca(eig_res),
+                               f"optimalization with eigenvalues, {graph_name} of size {self.n}, projected to {d} dimensions")
+        else:
+            self.visualize_matrix(eig_res, f"optimalization with eigenvalues, {graph_name} of size {self.n}")
 
 
 def main():
-    n = 4
+    np.random.seed(44)
+
+    # examples
+    # two dimensional projection
+
+    n = 3
     graph = Graph()
-    graph.ba_graph(3, 7, 1)
-    # graph.complete_graph(50)
-    # graph.barbell_graph(20, 3)
     graph.cycle_graph(n)
-    graph.visualize()
-    graph.update()
+    graph.show_results("cycle")
 
-    # Y = graph.map_to_matrix(2)
-    Y = graph.find_opt_y(2)
-    # Y = graph.sklearn_embeding().reshape(2, -1)
+    n = 10
+    graph.cycle_graph(n)
+    graph.show_results("cycle")
 
-    print(Y)
+    graph.barbell_graph(5, 3)
+    graph.show_results("barbell graph")
 
-    plt.scatter(Y[0], Y[1])
-    plt.show()
+    graph.ba_graph(7, 10, 3)
+    graph.show_results("BA graph")
 
-    pca = PCA(n_components=2)
-    print("pca")
-    Y_ = pca.fit_transform(Y.transpose())
-    Y_ = np.array([np.array(xi) for xi in Y_])
-    Y_ = np.reshape(Y_, (2, -1))
-    print(Y_[0])
+    # multidimensional
+    n = 5
+    graph = Graph()
+    graph.cycle_graph(n)
+    graph.show_results("cycle", 4)
 
-    plt.scatter(Y_[:][0], Y_[:][1])
+    n = 10
+    graph = Graph()
+    graph.cycle_graph(n)
+    graph.show_results("cycle", 5)
 
-    plt.show()
+    n = 10
+    graph = Graph()
+    graph.cycle_graph(n)
+    graph.show_results("cycle", 8)
+
+    graph.barbell_graph(5, 3)
+    graph.show_results("barbell_graph", 5)
+
+    graph.ba_graph(7, 10, 3)
+    graph.show_results("BA graph", 6)
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     main()
 
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
-
-
-# cleaned code
-
-
-def find_optimal_y(A, D, d):
-    """
-    funkcja find_optimal_y przyjmuje trzy parametry
-    A - macierz sąsiedztwa pewnego grafu G
-    D - macierz stopni pewnego grafu G
-    d - wartość określającą na ile wymiarów ma być rzutowany wynik
-
-    funkcja w wyniku zwraca macierz Y rozmiaru dxn, gdzie n to liczba wierzchołków grafu,
-    która powinna jak najlepiej odwzorowywać graf G w d wymiarach
-
-    na przykład:
-    Cykl długości 3 jest dobrze reprezentowany przez macierz
-    Y = {{-1, 0, 1}, {-1, 1, 0}}
-    """
