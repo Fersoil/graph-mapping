@@ -179,7 +179,7 @@ class Graph:
             where Y^T is the transposition of matrix Y, @ is the product of matrices, D is the degree matrix of graph G
             and I is the identity matrix
 
-            funkcja returns 0 if the condistion is met, otherwise it returns absolute deviation of matrix difference:
+            function returns 0 if the condistion is met, otherwise it returns absolute deviation of matrix difference:
             Y^T @ D @ Y - I
             """
             Y = np.reshape(Y, (self.n, d))  # thanks to this reshaping, Y can be one dimentional as opt.minimmize wishes
